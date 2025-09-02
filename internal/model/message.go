@@ -542,3 +542,218 @@ func (m *Message) CSV(host string) []string {
 		m.PlainTextContent(),
 	}
 }
+
+// HTML 返回HTML格式的消息内容，支持语音和图片的悬停预览
+func (m *Message) HTML(showChatRoom bool, timeFormat string, host string) string {
+	if timeFormat == "" {
+		timeFormat = "01-02 15:04:05"
+	}
+
+	m.SetContent("host", host)
+
+	buf := strings.Builder{}
+
+	sender := m.Sender
+	if m.IsSelf {
+		sender = "我"
+	}
+	if m.SenderName != "" {
+		buf.WriteString(m.SenderName)
+		buf.WriteString("(")
+		buf.WriteString(sender)
+		buf.WriteString(")")
+	} else {
+		buf.WriteString(sender)
+	}
+	buf.WriteString(" ")
+
+	if m.IsChatRoom && showChatRoom {
+		buf.WriteString("[")
+		if m.TalkerName != "" {
+			buf.WriteString(m.TalkerName)
+			buf.WriteString("(")
+			buf.WriteString(m.Talker)
+			buf.WriteString(")")
+		} else {
+			buf.WriteString(m.Talker)
+		}
+		buf.WriteString("] ")
+	}
+
+	buf.WriteString(m.Time.Format(timeFormat))
+	buf.WriteString("<br/>")
+
+	buf.WriteString(m.HTMLContent())
+	buf.WriteString("<br/>")
+
+	return buf.String()
+}
+
+// HTMLContent 返回HTML格式的消息内容
+func (m *Message) HTMLContent() string {
+	switch m.Type {
+	case MessageTypeText:
+		return m.Content
+	case MessageTypeImage:
+		keylist := make([]string, 0)
+		if m.Contents["md5"] != nil {
+			if md5, ok := m.Contents["md5"].(string); ok {
+				keylist = append(keylist, md5)
+			}
+		}
+		if m.Contents["path"] != nil {
+			if path, ok := m.Contents["path"].(string); ok {
+				keylist = append(keylist, path)
+			}
+		}
+		if m.Contents["thumbpath"] != nil {
+			if thumbpath, ok := m.Contents["thumbpath"].(string); ok {
+				keylist = append(keylist, thumbpath)
+			}
+		}
+		imageUrl := fmt.Sprintf("http://%s/image/%s", m.Contents["host"], strings.Join(keylist, ","))
+		return fmt.Sprintf(`<span class="media-preview" data-type="image" data-url="%s">![图片]</span>`, imageUrl)
+	case MessageTypeVoice:
+		if voice, ok := m.Contents["voice"]; ok {
+			voiceUrl := fmt.Sprintf("http://%s/voice/%s", m.Contents["host"], voice)
+			return fmt.Sprintf(`<span class="media-preview" data-type="voice" data-url="%s">[语音]</span>`, voiceUrl)
+		}
+		return "[语音]"
+	case MessageTypeCard:
+		return "[名片]"
+	case MessageTypeVideo:
+		keylist := make([]string, 0)
+		if m.Contents["md5"] != nil {
+			if md5, ok := m.Contents["md5"].(string); ok {
+				keylist = append(keylist, md5)
+			}
+		}
+		if m.Contents["rawmd5"] != nil {
+			if rawmd5, ok := m.Contents["rawmd5"].(string); ok {
+				keylist = append(keylist, rawmd5)
+			}
+		}
+		if m.Contents["path"] != nil {
+			if path, ok := m.Contents["path"].(string); ok {
+				keylist = append(keylist, path)
+			}
+		}
+		videoUrl := fmt.Sprintf("http://%s/video/%s", m.Contents["host"], strings.Join(keylist, ","))
+		return fmt.Sprintf(`<span class="media-preview" data-type="video" data-url="%s">![视频]</span>`, videoUrl)
+	case MessageTypeAnimation:
+		if m.Contents["cdnurl"] != nil {
+			if cdnURL, ok := m.Contents["cdnurl"].(string); ok {
+				return fmt.Sprintf(`<span class="media-preview" data-type="image" data-url="%s">![动画表情]</span>`, cdnURL)
+			}
+		}
+		return "[动画表情]"
+	case MessageTypeLocation:
+		keylist := make([]string, 0)
+		for _, key := range []string{"path", "thumbpath"} {
+			if m.Contents[key] != nil {
+				if path, ok := m.Contents[key].(string); ok {
+					keylist = append(keylist, path)
+				}
+			}
+		}
+		if len(keylist) > 0 {
+			locationUrl := fmt.Sprintf("http://%s/image/%s", m.Contents["host"], strings.Join(keylist, ","))
+			return fmt.Sprintf(`<span class="media-preview" data-type="image" data-url="%s">[位置]</span>`, locationUrl)
+		}
+		return "[位置]"
+	case MessageTypeShare:
+		switch m.SubType {
+		case MessageSubTypeLink:
+			if m.Contents["url"] != nil {
+				if url, ok := m.Contents["url"].(string); ok {
+					return fmt.Sprintf("[链接](%s)", url)
+				}
+			}
+			return "[链接]"
+		case MessageSubTypeFile:
+			keylist := make([]string, 0)
+			if m.Contents["path"] != nil {
+				if path, ok := m.Contents["path"].(string); ok {
+					keylist = append(keylist, path)
+				}
+			}
+			if len(keylist) > 0 {
+				fileUrl := fmt.Sprintf("http://%s/file/%s", m.Contents["host"], strings.Join(keylist, ","))
+				return fmt.Sprintf(`<span class="media-preview" data-type="file" data-url="%s">[文件]</span>`, fileUrl)
+			}
+			return "[文件]"
+		case MessageSubTypeQuote:
+			_refer, ok := m.Contents["refer"]
+			if !ok {
+				if m.Content == "" {
+					return "[引用]"
+				}
+				return "> [引用]<br/>" + m.Content
+			}
+			refer, ok := _refer.(*Message)
+			if !ok {
+				if m.Content == "" {
+					return "[引用]"
+				}
+				return "> [引用]<br/>" + m.Content
+			}
+			buf := strings.Builder{}
+			host := ""
+			if m.Contents["host"] != nil {
+				host = m.Contents["host"].(string)
+			}
+			referContent := refer.HTML(false, "", host)
+			for _, line := range strings.Split(referContent, "<br/>") {
+				if line == "" {
+					continue
+				}
+				buf.WriteString("> ")
+				buf.WriteString(line)
+				buf.WriteString("<br/>")
+			}
+			buf.WriteString(m.Content)
+			return buf.String()
+		case MessageSubTypePat:
+			return m.Content
+		case MessageSubTypeChannelLive:
+			if m.Contents["title"] != nil {
+				return fmt.Sprintf("[视频号直播|%s]", m.Contents["title"])
+			}
+			return "[视频号直播]"
+		case MessageSubTypeChatRoomNotice:
+			_recordInfo, ok := m.Contents["recordInfo"]
+			if !ok {
+				return "[群公告]"
+			}
+			recordInfo, ok := _recordInfo.(*RecordInfo)
+			if !ok {
+				return "[群公告]"
+			}
+			host := ""
+			if m.Contents["host"] != nil {
+				host = m.Contents["host"].(string)
+			}
+			return recordInfo.String("群公告", "", host)
+		case MessageSubTypeMusic:
+			return fmt.Sprintf("[音乐|%s](%s)", m.Contents["title"], m.Contents["url"])
+		case MessageSubTypePay:
+			return m.Content
+		case MessageSubTypeRedEnvelope:
+			return "[红包]"
+		case MessageSubTypeRedEnvelopeCover:
+			return "[红包封面]"
+		default:
+			return "[分享]"
+		}
+	case MessageTypeVOIP:
+		return "[语音通话]"
+	case MessageTypeSystem:
+		return m.Content
+	default:
+		content := m.Content
+		if len(content) > 120 {
+			content = content[:120] + "<...>"
+		}
+		return fmt.Sprintf("Type: %d Content: %s", m.Type, content)
+	}
+}

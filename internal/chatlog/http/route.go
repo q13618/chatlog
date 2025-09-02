@@ -137,6 +137,110 @@ func (s *Service) handleChatlog(c *gin.Context) {
 			csvWriter.Write(m.CSV(c.Request.Host))
 		}
 		csvWriter.Flush()
+	case "html":
+		// HTML格式，支持悬停预览
+		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Writer.Flush()
+
+		// 输出HTML头部和样式
+		c.Writer.WriteString(`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>聊天记录</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .message { margin-bottom: 15px; padding: 10px; border-bottom: 1px solid #eee; }
+        .media-preview { cursor: pointer; color: #0066cc; text-decoration: underline; }
+        .media-preview:hover { color: #003366; }
+        .preview-container { position: relative; }
+        .preview-content { 
+            display: none; 
+            position: absolute; 
+            z-index: 1000; 
+            background: white; 
+            border: 1px solid #ccc; 
+            padding: 10px; 
+            border-radius: 5px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 300px;
+        }
+        .preview-content img { max-width: 100%; height: auto; }
+        .preview-content audio { width: 100%; }
+        .preview-content video { max-width: 100%; height: auto; }
+    </style>
+</head>
+<body>
+    <h1>聊天记录</h1>
+    <div class="chat-container">`)
+
+		for _, m := range messages {
+			c.Writer.WriteString(`<div class="message">`)
+			c.Writer.WriteString(m.HTML(strings.Contains(q.Talker, ","), util.PerfectTimeFormat(start, end), c.Request.Host))
+			c.Writer.WriteString(`</div>`)
+		}
+
+		// 输出HTML尾部和JavaScript
+		c.Writer.WriteString(`
+    </div>
+    <script>
+        // 为所有媒体预览元素添加悬停事件
+        document.querySelectorAll('.media-preview').forEach(function(element) {
+            const type = element.getAttribute('data-type');
+            const url = element.getAttribute('data-url');
+            
+            if (!url) return;
+            
+            // 创建预览容器
+            const previewContainer = document.createElement('div');
+            previewContainer.className = 'preview-container';
+            element.parentNode.insertBefore(previewContainer, element.nextSibling);
+            
+            // 创建预览内容
+            const previewContent = document.createElement('div');
+            previewContent.className = 'preview-content';
+            previewContainer.appendChild(previewContent);
+            
+            // 根据类型创建不同的预览内容
+            if (type === 'image') {
+                const img = document.createElement('img');
+                img.src = url;
+                img.alt = '图片预览';
+                previewContent.appendChild(img);
+            } else if (type === 'voice') {
+                const audio = document.createElement('audio');
+                audio.controls = true;
+                audio.src = url;
+                previewContent.appendChild(audio);
+            } else if (type === 'video') {
+                const video = document.createElement('video');
+                video.controls = true;
+                video.src = url;
+                video.style.maxWidth = '300px';
+                previewContent.appendChild(video);
+            } else if (type === 'file') {
+                const link = document.createElement('a');
+                link.href = url;
+                link.textContent = '下载文件';
+                link.target = '_blank';
+                previewContent.appendChild(link);
+            }
+            
+            // 悬停显示预览
+            element.addEventListener('mouseenter', function() {
+                previewContent.style.display = 'block';
+            });
+            
+            // 离开隐藏预览
+            element.addEventListener('mouseleave', function() {
+                previewContent.style.display = 'none';
+            });
+        });
+    </script>
+</body>
+</html>`)
 	case "json":
 		// json
 		c.JSON(http.StatusOK, messages)

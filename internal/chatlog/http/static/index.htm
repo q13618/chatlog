@@ -346,6 +346,7 @@
             <div class="tab" data-tab="chatroom">群聊</div>
             <div class="tab" data-tab="contact">联系人</div>
             <div class="tab" data-tab="chatlog">聊天记录</div>
+            <div class="tab" data-tab="chatlog-test">聊天记录 (测试)</div>
           </div>
 
           <!-- 会话查询表单 -->
@@ -500,6 +501,83 @@
                 <option value="text">纯文本</option>
                 <option value="json">JSON</option>
                 <option value="csv">CSV</option>
+                <option value="html">HTML</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 聊天记录(测试) 查询表单 -->
+          <div class="tab-content" id="chatlog-test-tab">
+            <div class="api-description">
+              <p>
+                查询指定时间范围内与特定联系人或群聊的聊天记录（测试）。<span
+                  class="badge"
+                  >GET /api/v1/chatlog</span
+                >
+              </p>
+            </div>
+            <div class="form-group">
+              <label for="time-test"
+                >时间范围：<span class="required-field">*</span></label
+              >
+              <input
+                type="text"
+                id="time-test"
+                placeholder="例如：2023-01-01 或 2023-01-01~2023-01-31"
+              />
+            </div>
+            <div class="form-group">
+              <label for="talker-test"
+                >聊天对象：<span class="required-field">*</span></label
+              >
+              <input
+                type="text"
+                id="talker-test"
+                placeholder="wxid、群ID、备注名或昵称"
+              />
+            </div>
+            <div class="form-group">
+              <label for="sender-test"
+                >发送者：<span class="optional-param">可选</span></label
+              >
+              <input
+                type="text"
+                id="sender-test"
+                placeholder="指定消息发送者"
+              />
+            </div>
+            <div class="form-group">
+              <label for="keyword-test"
+                >关键词：<span class="optional-param">可选</span></label
+              >
+              <input
+                type="text"
+                id="keyword-test"
+                placeholder="搜索消息内容中的关键词"
+              />
+            </div>
+            <div class="form-group">
+              <label for="limit-test"
+                >返回数量：<span class="optional-param">可选</span></label
+              >
+              <input type="number" id="limit-test" placeholder="默认不做限制" />
+            </div>
+            <div class="form-group">
+              <label for="offset-test"
+                >偏移量：<span class="optional-param">可选</span></label
+              >
+              <input type="number" id="offset-test" placeholder="默认 0" />
+            </div>
+            <div class="form-group">
+              <label for="format-test"
+                >输出格式：<span class="optional-param">可选</span></label
+              >
+              <select id="format-test">
+                <option value="">默认</option>
+                <option value="text">纯文本</option>
+                <option value="json">JSON</option>
+                <option value="csv">CSV</option>
+                <option value="html">HTML</option>
               </select>
             </div>
           </div>
@@ -646,6 +724,33 @@
                 if (format) params.append("format", format);
                 break;
 
+              case "chatlog-test":
+                url += "chatlog";
+                const timeTest = document.getElementById("time-test").value;
+                const talkerTest = document.getElementById("talker-test").value;
+                const senderTest = document.getElementById("sender-test").value;
+                const keywordTest = document.getElementById("keyword-test").value;
+                const limitTest = document.getElementById("limit-test").value;
+                const offsetTest = document.getElementById("offset-test").value;
+                const formatTest = document.getElementById("format-test").value;
+
+                // 验证必填项
+                if (!timeTest || !talkerTest) {
+                  errorMessage.textContent =
+                    "错误: 时间范围和聊天对象为必填项！";
+                  errorMessage.style.display = "block";
+                  return;
+                }
+
+                if (timeTest) params.append("time", timeTest);
+                if (talkerTest) params.append("talker", talkerTest);
+                if (senderTest) params.append("sender", senderTest);
+                if (keywordTest) params.append("keyword", keywordTest);
+                if (limitTest) params.append("limit", limitTest);
+                if (offsetTest) params.append("offset", offsetTest);
+                if (formatTest) params.append("format", formatTest);
+                break;
+
               case "contact":
                 url += "contact";
                 const contactKeyword =
@@ -707,6 +812,10 @@
               // 如果是JSON，格式化显示
               result = await response.json();
               resultContainer.innerHTML = JSON.stringify(result, null, 2);
+            } else if (contentType && contentType.includes("text/html")) {
+              // 如果是HTML，直接显示HTML内容
+              result = await response.text();
+              resultContainer.innerHTML = result;
             } else {
               // 其他格式直接显示文本
               result = await response.text();
