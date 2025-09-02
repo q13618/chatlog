@@ -212,14 +212,30 @@ func (s *Service) handleChatlog(c *gin.Context) {
             } else if (type === 'voice') {
                 const audio = document.createElement('audio');
                 audio.controls = true;
+                audio.autoplay = true;
+                audio.muted = true; // 静音以允许自动播放
                 audio.src = url;
                 previewContent.appendChild(audio);
+                
+                // 添加提示信息
+                const tip = document.createElement('div');
+                tip.style.cssText = 'font-size: 12px; color: #666; margin-top: 5px; text-align: center;';
+                tip.textContent = '已静音播放，点击音量按钮取消静音';
+                previewContent.appendChild(tip);
             } else if (type === 'video') {
                 const video = document.createElement('video');
                 video.controls = true;
+                video.autoplay = true;
+                video.muted = true; // 静音以允许自动播放
                 video.src = url;
                 video.style.maxWidth = '300px';
                 previewContent.appendChild(video);
+                
+                // 添加提示信息
+                const tip = document.createElement('div');
+                tip.style.cssText = 'font-size: 12px; color: #666; margin-top: 5px; text-align: center;';
+                tip.textContent = '已静音播放，点击音量按钮取消静音';
+                previewContent.appendChild(tip);
             } else if (type === 'file') {
                 const link = document.createElement('a');
                 link.href = url;
@@ -233,8 +249,23 @@ func (s *Service) handleChatlog(c *gin.Context) {
                 previewContent.style.display = 'block';
             });
             
-            // 离开隐藏预览
+            // 离开隐藏预览 - 添加延迟，让用户有时间移动到预览内容
+            let hideTimeout;
             element.addEventListener('mouseleave', function() {
+                hideTimeout = setTimeout(() => {
+                    previewContent.style.display = 'none';
+                }, 300); // 300ms延迟
+            });
+            
+            // 当鼠标进入预览内容时，取消隐藏
+            previewContent.addEventListener('mouseenter', function() {
+                if (hideTimeout) {
+                    clearTimeout(hideTimeout);
+                }
+            });
+            
+            // 当鼠标离开预览内容时，隐藏预览
+            previewContent.addEventListener('mouseleave', function() {
                 previewContent.style.display = 'none';
             });
         });
