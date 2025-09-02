@@ -429,7 +429,7 @@ func (m *Message) PlainTextContent() string {
 			if m.Contents["host"] != nil {
 				host = m.Contents["host"].(string)
 			}
-			return recordInfo.String("合并转发", "", host)
+			return recordInfo.HTMLString("合并转发", "", host)
 		case MessageSubTypeNote:
 			_recordInfo, ok := m.Contents["recordInfo"]
 			if !ok {
@@ -443,7 +443,7 @@ func (m *Message) PlainTextContent() string {
 			if m.Contents["host"] != nil {
 				host = m.Contents["host"].(string)
 			}
-			return recordInfo.String("笔记", "", host)
+			return recordInfo.HTMLString("笔记", "", host)
 		case MessageSubTypeMiniProgram, MessageSubTypeMiniProgram2:
 			if m.Contents["title"] == "" {
 				return "[小程序]"
@@ -663,25 +663,111 @@ func (m *Message) HTMLContent() string {
 		return "[位置]"
 	case MessageTypeShare:
 		switch m.SubType {
-		case MessageSubTypeLink:
-			if m.Contents["url"] != nil {
-				if url, ok := m.Contents["url"].(string); ok {
-					return fmt.Sprintf("[链接](%s)", url)
+		case MessageSubTypeText:
+			if m.Contents["title"] != nil && m.Contents["desc"] != nil {
+				if title, ok := m.Contents["title"].(string); ok {
+					if desc, ok := m.Contents["desc"].(string); ok {
+						return fmt.Sprintf(`<a href="%s" target="_blank" style="color: #0066cc; text-decoration: underline;">[链接|%s]</a>`, desc, title)
+					}
+				}
+			}
+			return "[链接]"
+		case MessageSubTypeLink, MessageSubTypeLink2:
+			if m.Contents["title"] != nil && m.Contents["url"] != nil {
+				if title, ok := m.Contents["title"].(string); ok {
+					if url, ok := m.Contents["url"].(string); ok {
+						return fmt.Sprintf(`<a href="%s" target="_blank" style="color: #0066cc; text-decoration: underline;">[链接|%s]</a>`, url, title)
+					}
 				}
 			}
 			return "[链接]"
 		case MessageSubTypeFile:
-			keylist := make([]string, 0)
-			if m.Contents["path"] != nil {
-				if path, ok := m.Contents["path"].(string); ok {
-					keylist = append(keylist, path)
+			// 获取文件名，优先使用title，如果没有则使用默认名称
+			fileName := "未知文件"
+			if m.Contents["title"] != nil {
+				if title, ok := m.Contents["title"].(string); ok && title != "" {
+					fileName = title
 				}
 			}
-			if len(keylist) > 0 {
-				fileUrl := fmt.Sprintf("http://%s/file/%s", m.Contents["host"], strings.Join(keylist, ","))
-				return fmt.Sprintf(`<span class="media-preview" data-type="file" data-url="%s">[文件]</span>`, fileUrl)
+
+			// 构建文件URL，优先使用md5，如果没有则使用path
+			var fileUrl string
+			if m.Contents["md5"] != nil {
+				if md5, ok := m.Contents["md5"].(string); ok && md5 != "" {
+					fileUrl = fmt.Sprintf("http://%s/file/%s", m.Contents["host"], md5)
+				}
 			}
-			return "[文件]"
+
+			// 如果md5不存在，尝试使用path
+			if fileUrl == "" {
+				keylist := make([]string, 0)
+				if m.Contents["path"] != nil {
+					if path, ok := m.Contents["path"].(string); ok {
+						keylist = append(keylist, path)
+					}
+				}
+				if len(keylist) > 0 {
+					fileUrl = fmt.Sprintf("http://%s/file/%s", m.Contents["host"], strings.Join(keylist, ","))
+				}
+			}
+
+			// 如果有有效的URL，创建可点击的链接
+			if fileUrl != "" {
+				return fmt.Sprintf(`<a href="%s" target="_blank" style="color: #0066cc; text-decoration: underline;">[文件] %s</a>`, fileUrl, fileName)
+			}
+
+			return fmt.Sprintf("[文件] %s", fileName)
+		case MessageSubTypeGIF:
+			return "[GIF表情]"
+		case MessageSubTypeMergeForward:
+			_recordInfo, ok := m.Contents["recordInfo"]
+			if !ok {
+				return "[合并转发]"
+			}
+			recordInfo, ok := _recordInfo.(*RecordInfo)
+			if !ok {
+				return "[合并转发]"
+			}
+			host := ""
+			if m.Contents["host"] != nil {
+				host = m.Contents["host"].(string)
+			}
+			return recordInfo.String("合并转发", "", host)
+		case MessageSubTypeNote:
+			_recordInfo, ok := m.Contents["recordInfo"]
+			if !ok {
+				return "[笔记]"
+			}
+			recordInfo, ok := _recordInfo.(*RecordInfo)
+			if !ok {
+				return "[笔记]"
+			}
+			host := ""
+			if m.Contents["host"] != nil {
+				host = m.Contents["host"].(string)
+			}
+			return recordInfo.String("笔记", "", host)
+		case MessageSubTypeMiniProgram, MessageSubTypeMiniProgram2:
+			if m.Contents["title"] == "" {
+				return "[小程序]"
+			}
+			if m.Contents["url"] != nil {
+				if url, ok := m.Contents["url"].(string); ok {
+					return fmt.Sprintf(`<a href="%s" target="_blank" style="color: #0066cc; text-decoration: underline;">[小程序|%s]</a>`, url, m.Contents["title"])
+				}
+			}
+			return fmt.Sprintf("[小程序|%s]", m.Contents["title"])
+		case MessageSubTypeChannel:
+			if m.Contents["title"] == "" {
+				return "[视频号]"
+			} else {
+				if m.Contents["url"] != nil {
+					if url, ok := m.Contents["url"].(string); ok {
+						return fmt.Sprintf(`<a href="%s" target="_blank" style="color: #0066cc; text-decoration: underline;">[视频号|%s]</a>`, url, m.Contents["title"])
+					}
+				}
+				return fmt.Sprintf("[视频号|%s]", m.Contents["title"])
+			}
 		case MessageSubTypeQuote:
 			_refer, ok := m.Contents["refer"]
 			if !ok {
@@ -735,7 +821,14 @@ func (m *Message) HTMLContent() string {
 			}
 			return recordInfo.String("群公告", "", host)
 		case MessageSubTypeMusic:
-			return fmt.Sprintf("[音乐|%s](%s)", m.Contents["title"], m.Contents["url"])
+			if m.Contents["title"] != nil && m.Contents["url"] != nil {
+				if title, ok := m.Contents["title"].(string); ok {
+					if url, ok := m.Contents["url"].(string); ok {
+						return fmt.Sprintf(`<a href="%s" target="_blank" style="color: #0066cc; text-decoration: underline;">[音乐|%s]</a>`, url, title)
+					}
+				}
+			}
+			return "[音乐]"
 		case MessageSubTypePay:
 			return m.Content
 		case MessageSubTypeRedEnvelope:

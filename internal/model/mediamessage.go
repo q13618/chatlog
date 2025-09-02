@@ -304,6 +304,115 @@ func (r *RecordInfo) String(_type, title, host string) string {
 	return buf.String()
 }
 
+// HTMLString 返回适用于 HTML 的合并转发/笔记内容
+// - 使用 <br/> 分行
+// - 对链接/小程序/音乐等隐藏 URL，仅将标题作为可点击链接
+// - 图片/视频/文件使用与 HTML 输出一致的可预览/下载格式
+func (r *RecordInfo) HTMLString(_type, title, host string) string {
+	buf := strings.Builder{}
+	if title == "" {
+		title = r.Title
+	}
+	if title == "" {
+		title = strings.TrimSpace(strings.ReplaceAll(r.Desc, "\n", " "))
+		if len(title) > 80 {
+			title = title[:80] + "..."
+		}
+	}
+	buf.WriteString(fmt.Sprintf("[%s|%s]<br/>", _type, title))
+	for _, item := range r.DataList.DataItems {
+		// 行首来源与时间
+		buf.WriteString(fmt.Sprintf("&nbsp;&nbsp;%s %s<br/>", item.SourceName, item.SourceTime))
+
+		// 套娃合并转发
+		if item.DataType == "17" && item.RecordXML != nil {
+			content := item.RecordXML.RecordInfo.HTMLString(_type, item.DataTitle, host)
+			if content != "" {
+				for _, line := range strings.Split(content, "<br/>") {
+					if line == "" {
+						continue
+					}
+					buf.WriteString("&nbsp;&nbsp;")
+					buf.WriteString(line)
+					buf.WriteString("<br/>")
+				}
+			}
+			continue
+		}
+
+		switch item.DataType {
+		case "2":
+			// 图片
+			imageURL := fmt.Sprintf("http://%s/image/%s", host, item.FullMD5)
+			buf.WriteString(fmt.Sprintf("&nbsp;&nbsp;<span class=\"media-preview\" data-type=\"image\" data-url=\"%s\">![图片]</span><br/>", imageURL))
+		case "4":
+			// 视频
+			videoURL := fmt.Sprintf("http://%s/video/%s", host, item.FullMD5)
+			buf.WriteString(fmt.Sprintf("&nbsp;&nbsp;<span class=\"media-preview\" data-type=\"video\" data-url=\"%s\">![视频]</span><br/>", videoURL))
+		case "8":
+			// 文件（跳过 .htm）
+			if item.DataFmt == ".htm" {
+				break
+			}
+			fileURL := fmt.Sprintf("http://%s/file/%s", host, item.FullMD5)
+			fileTitle := item.DataTitle
+			if fileTitle == "" {
+				fileTitle = "未知文件"
+			}
+			buf.WriteString(fmt.Sprintf("&nbsp;&nbsp;<a href=\"%s\" target=\"_blank\" style=\"color: #0066cc; text-decoration: underline;\">[文件] %s</a><br/>", fileURL, fileTitle))
+		case "5":
+			// 链接（隐藏 URL）
+			if item.Link != "" {
+				linkTitle := item.DataTitle
+				if linkTitle == "" {
+					linkTitle = "链接"
+				}
+				buf.WriteString(fmt.Sprintf("&nbsp;&nbsp;<a href=\"%s\" target=\"_blank\" style=\"color: #0066cc; text-decoration: underline;\">[链接|%s]</a><br/>", item.Link, strings.TrimSpace(linkTitle)))
+			} else {
+				buf.WriteString("&nbsp;&nbsp;[链接]<br/>")
+			}
+		case "6":
+			// 位置
+			buf.WriteString(fmt.Sprintf("&nbsp;&nbsp;[位置|%s]<br/>", item.Location.PoiName))
+		case "22":
+			// 视频号
+			title := strings.TrimSpace(strings.ReplaceAll(item.DataDesc, "\n", " "))
+			buf.WriteString(fmt.Sprintf("&nbsp;&nbsp;[视频号|%s]<br/>", title))
+		case "23":
+			// 视频号直播
+			title := strings.TrimSpace(strings.ReplaceAll(item.DataDesc, "\n", " "))
+			buf.WriteString(fmt.Sprintf("&nbsp;&nbsp;[视频号直播|%s]<br/>", title))
+		case "32":
+			// 音乐（隐藏 URL）
+			musicTitle := item.DataTitle
+			if musicTitle == "" {
+				musicTitle = "音乐"
+			}
+			if item.StreamWebURL != "" {
+				buf.WriteString(fmt.Sprintf("&nbsp;&nbsp;<a href=\"%s\" target=\"_blank\" style=\"color: #0066cc; text-decoration: underline;\">[音乐|%s]</a><br/>", item.StreamWebURL, musicTitle))
+			} else {
+				buf.WriteString(fmt.Sprintf("&nbsp;&nbsp;[音乐|%s]<br/>", musicTitle))
+			}
+		case "37":
+			// 动画表情
+			buf.WriteString("&nbsp;&nbsp;[动画表情]<br/>")
+		default:
+			for _, line := range strings.Split(item.DataDesc, "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				buf.WriteString("&nbsp;&nbsp;")
+				buf.WriteString(line)
+				buf.WriteString("<br/>")
+			}
+		}
+
+		buf.WriteString("<br/>")
+	}
+	return buf.String()
+}
+
 // PatMsg 拍一拍消息结构
 type PatMsg struct {
 	ChatUser  string  `xml:"chatUser"`  // 被拍的用户
